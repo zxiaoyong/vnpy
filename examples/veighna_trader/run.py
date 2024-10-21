@@ -36,7 +36,7 @@ from vnpy_ctabacktester import CtaBacktesterApp
 # from vnpy_rpcservice import RpcServiceApp
 # from vnpy_excelrtd import ExcelRtdApp
 from vnpy_datamanager import DataManagerApp
-# from vnpy_datarecorder import DataRecorderApp
+from vnpy_datarecorder import DataRecorderApp
 # from vnpy_riskmanager import RiskManagerApp
 # from vnpy_webtrader import WebTraderApp
 # from vnpy_portfoliomanager import PortfolioManagerApp
@@ -84,7 +84,7 @@ def main():
     # main_engine.add_app(RpcServiceApp)
     # main_engine.add_app(ExcelRtdApp)
     main_engine.add_app(DataManagerApp)
-    # main_engine.add_app(DataRecorderApp)
+    main_engine.add_app(DataRecorderApp)
     # main_engine.add_app(RiskManagerApp)
     # main_engine.add_app(WebTraderApp)
     # main_engine.add_app(PortfolioManagerApp)
