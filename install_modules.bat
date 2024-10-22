@@ -13,3 +13,4 @@ IF NOT %pypi_index%"" == "" SET pypi_index=--index-url %pypi_index%
 %python% -m pip install --extra-index-url https://pypi.vnpy.com vnpy_ctp
 %python% -m pip install --extra-index-url https://pypi.vnpy.com vnpy_datarecorder
 %python% -m pip install --extra-index-url https://pypi.vnpy.com vnpy_spreadtrading
+%python% -m pip install --extra-index-url https://pypi.vnpy.com vnpy_riskmanager
