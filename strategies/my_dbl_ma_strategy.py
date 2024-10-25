@@ -39,7 +39,7 @@ class myDoubleMaStrategy(CtaTemplate):
         Callback when strategy is inited.
         """
         self.write_log("策略初始化")
-        self.load_bar(10)
+        self.load_bar(10, use_database=True)
 
     def on_start(self):
         """
@@ -89,14 +89,14 @@ class myDoubleMaStrategy(CtaTemplate):
                 self.buy(bar.close_price, 1)
             elif self.pos < 0:
                 self.cover(bar.close_price, 1)
-                self.buy(bar.close_price, 1)
+                # self.buy(bar.close_price, 1)
 
         elif cross_below:
             if self.pos == 0:
                 self.short(bar.close_price, 1)
             elif self.pos > 0:
                 self.sell(bar.close_price, 1)
-                self.short(bar.close_price, 1)
+                # self.short(bar.close_price, 1)
 
         self.put_event()
 
