@@ -36,7 +36,7 @@ class myBiasStrategy(CtaTemplate):
     # rsi_window = 14
     # fast_window = 5
     # slow_window = 20
-    # fixed_size = 1
+    fixed_size = 1
 
     # rsi_value = 0
     # rsi_long = 0
@@ -59,26 +59,26 @@ class myBiasStrategy(CtaTemplate):
     ma60 = 0
     ma120 = 0
     
+    c1:bool = False
+    c2:bool = False
+    c3:bool = False
+    c4:bool = False
+    c5:bool = False
+    c6:bool = False
+    
     diff_bias = 0
     rsi1 = 0
     roc_4 = 0
+    
 
-    parameters = ["rsi_p", "bias_p1", "bias_p2", "bias_n2", "over_120"]
+    parameters = ["rsi_p", "bias_p1", "bias_p2", "bias_n2", "roc_p"]
 
-    variables = ["ma5", "ma10", "ma20", "ma30", "diff_bias", "rsi1", "roc_4"]
+    variables = ["ma5", "ma10", "ma20", "ma30", "diff_bias", "rsi1", "roc_4",
+                 "c1", "c2", "c3", "c4", "c5", "c6"]
 
     def __init__(self, cta_engine, strategy_name, vt_symbol, setting):
         """"""
         super().__init__(cta_engine, strategy_name, vt_symbol, setting)
-
-        # self.rsi_long = 50 + self.rsi_signal
-        # self.rsi_short = 50 - self.rsi_signal
-
-        # self.bg5 = BarGenerator(self.on_bar, 5, self.on_5min_bar)
-        # self.am5 = ArrayManager()
-
-        # self.bg15 = BarGenerator(self.on_bar, 15, self.on_15min_bar)
-        # self.am15 = ArrayManager()
 
         self.bg = BarGenerator(self.on_bar)
         self.am = ArrayManager()
@@ -106,7 +106,7 @@ class myBiasStrategy(CtaTemplate):
         """
         Callback of new tick data update.
         """
-        # self.bg5.update_tick(tick)
+        self.bg.update_tick(tick)
 
     def on_bar(self, bar: BarData):
         """
@@ -145,29 +145,39 @@ class myBiasStrategy(CtaTemplate):
         ma20_is_up = self.ma_up(ma20_s, 2)
         close_above_ma60 = bar.close_price > self.ma60
         # 中短期均线向上
-        c1:bool = ma5_is_up and ma10_is_up and ma20_is_up and close_above_ma60
+        self.c1 = ma5_is_up and ma10_is_up and ma20_is_up and close_above_ma60
 
         # diff_bias 在N1周期内至少1个小于bias_p1
         c2_count = self.count_pred(diff_bias_s < self.bias_p1, self.N1)
-        c2:bool = c2_count > 0
+        self.c2 = c2_count > 0
         
         # rsi(5) 小于 rsi_p
-        c3:bool = self.rsi1 < self.rsi_p
+        self.c3 = self.rsi1 < self.rsi_p
         
         # 开仓时在BIAS_N2个周期内，MyBIAS没有大于BIAS_P2的值
         c4_count = self.count_pred(diff_bias_s > self.bias_p2, self.N2)
-        c4:bool = c4_count < 1
+        self.c4 = c4_count < 1
         
         close_above_ma120 = bar.close_price > self.ma120
         # 价格位于中长期均线之上
-        c5:bool = close_above_ma120
+        self.c5 = close_above_ma120
 
         # 开仓时最近4bar涨幅/跌幅小于0.35%
-        c6:bool = self.roc_4 < self.roc_p
+        self.c6 = self.roc_4 < self.roc_p
+        
+        if self.pos == 0:
+            if self.c1 and self.c2 and self.c3 and self.c4 and self.c5 and self.c6:
+                self.buy(bar.close_price, self.fixed_size)
+
+        elif self.pos > 0:
+            # 连续2bar低于ma20
+            sell_cond:bool = self.count_pred(am.close < ma20_s, 2) >= 2
+            if sell_cond:
+                self.sell(bar.close_price, abs(self.pos))
         
         self.put_event()
-        
-
+    
+    
     def calc_bias_diff(self, ma1:np.ndarray, ma2:np.ndarray, ma3:np.ndarray) -> np.ndarray:
         close = self.am.close
         bias1 = (close - ma1) / ma1 * 100
@@ -201,54 +211,12 @@ class myBiasStrategy(CtaTemplate):
                 return False
         return True
 
-    def on_5min_bar(self, bar: BarData):
-        """"""
-        self.cancel_all()
-
-        self.am5.update_bar(bar)
-        if not self.am5.inited:
-            return
-
-        if not self.ma_trend:
-            return
-
-        self.rsi_value = self.am5.rsi(self.rsi_window)
-
-        if self.pos == 0:
-            if self.ma_trend > 0 and self.rsi_value >= self.rsi_long:
-                self.buy(bar.close_price + 5, self.fixed_size)
-            elif self.ma_trend < 0 and self.rsi_value <= self.rsi_short:
-                self.short(bar.close_price - 5, self.fixed_size)
-
-        elif self.pos > 0:
-            if self.ma_trend < 0 or self.rsi_value < 50:
-                self.sell(bar.close_price - 5, abs(self.pos))
-
-        elif self.pos < 0:
-            if self.ma_trend > 0 or self.rsi_value > 50:
-                self.cover(bar.close_price + 5, abs(self.pos))
-
-        self.put_event()
-
-    def on_15min_bar(self, bar: BarData):
-        """"""
-        self.am15.update_bar(bar)
-        if not self.am15.inited:
-            return
-
-        self.fast_ma = self.am15.sma(self.fast_window)
-        self.slow_ma = self.am15.sma(self.slow_window)
-
-        if self.fast_ma > self.slow_ma:
-            self.ma_trend = 1
-        else:
-            self.ma_trend = -1
-
     def on_order(self, order: OrderData):
         """
         Callback of new order data update.
         """
-        pass
+        msg:str = f'{order.direction} {order.offset} {order.symbol}'
+        self.write_log(msg)
 
     def on_trade(self, trade: TradeData):
         """
