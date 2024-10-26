@@ -10,7 +10,19 @@ from vnpy_ctastrategy import (
 )
 
 import numpy as np
+from datetime import datetime, time
 
+# Define the start and end times
+trd_start_time = time(10, 0, 0)  # 10:00 AM
+trd_end_time = time(14, 0, 0)    # 2:00 PM
+
+def is_between_10_and_14(dt:datetime):
+
+    # Extract the time from the datetime object
+    current_time = dt.time()
+
+    # Check if the current_time is between start_time and end_time
+    return trd_start_time <= current_time <= trd_end_time
 
 class myBiasStrategy(CtaTemplate):
     """"""
@@ -81,7 +93,7 @@ class myBiasStrategy(CtaTemplate):
         super().__init__(cta_engine, strategy_name, vt_symbol, setting)
 
         self.bg = BarGenerator(self.on_bar)
-        self.am = ArrayManager()
+        self.am = ArrayManager(size=150)
 
     def on_init(self):
         """
@@ -167,13 +179,18 @@ class myBiasStrategy(CtaTemplate):
         
         if self.pos == 0:
             if self.c1 and self.c2 and self.c3 and self.c4 and self.c5 and self.c6:
-                self.buy(bar.close_price, self.fixed_size)
+                if is_between_10_and_14(bar.datetime):
+                    self.buy(bar.close_price, self.fixed_size)
+                    self.write_log(f"buy at {bar.close_price}")
+                else:
+                    self.write_log("不在交易时间10:00-14:00")
 
         elif self.pos > 0:
             # 连续2bar低于ma20
             sell_cond:bool = self.count_pred(am.close < ma20_s, 2) >= 2
             if sell_cond:
                 self.sell(bar.close_price, abs(self.pos))
+                self.write_log(f"close position at {bar.close_price}")
         
         self.put_event()
     
