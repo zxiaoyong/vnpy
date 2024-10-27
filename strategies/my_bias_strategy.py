@@ -9,8 +9,11 @@ from vnpy_ctastrategy import (
     ArrayManager,
 )
 
+import math
 import numpy as np
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
+
+from vnpy.trader.constant import Direction, Offset
 
 # Define the start and end times
 trd_start_time = time(10, 0, 0)  # 10:00 AM
@@ -39,10 +42,12 @@ class myBiasStrategy(CtaTemplate):
     # BIAS_N2: 3-100, 10
     bias_n2 = 10
     # OVER_120: 0-1, 1    开仓时是否必须在MA120之上
-    over_120 = 1
+    #over_120 = 1
     # ROC_P: 0.1-10, 0.35    开仓时最近4bar涨幅/跌幅小于0.35%
     roc_p = 0.35
     # MA60_P: 0-1, 0 开仓是是否必须MA5>MA60
+
+    op_offset_px = 1 # 开仓时回踩均线加价
 
     # rsi_signal = 20
     # rsi_window = 14
@@ -71,6 +76,9 @@ class myBiasStrategy(CtaTemplate):
     ma60 = 0
     ma120 = 0
     
+    last_open_trade_time:datetime = None
+    last_open_cost:float = None
+
     c1:bool = False
     c2:bool = False
     c3:bool = False
@@ -83,7 +91,7 @@ class myBiasStrategy(CtaTemplate):
     roc_4 = 0
     
 
-    parameters = ["rsi_p", "bias_p1", "bias_p2", "bias_n2", "roc_p"]
+    parameters = ["rsi_p", "bias_p1", "bias_p2", "bias_n2", "roc_p", "op_offset_px"]
 
     variables = ["ma5", "ma10", "ma20", "ma30", "diff_bias", "rsi1", "roc_4",
                  "c1", "c2", "c3", "c4", "c5", "c6"]
@@ -180,12 +188,28 @@ class myBiasStrategy(CtaTemplate):
         if self.pos == 0:
             if self.c1 and self.c2 and self.c3 and self.c4 and self.c5 and self.c6:
                 if is_between_10_and_14(bar.datetime):
-                    self.buy(bar.close_price, self.fixed_size)
-                    self.write_log(f"buy at {bar.close_price}")
+                    op_px = self.get_open_price(bar, self.ma10, self.ma20)
+                    self.buy(op_px, self.fixed_size)
+                    self.write_log(f"buy at {op_px}")
                 else:
                     self.write_log("不在交易时间10:00-14:00")
 
         elif self.pos > 0:
+
+            # 【开仓初期】开仓5分钟内，回撤一定程度需要尽快平仓
+            own_pos_duration = bar.datetime - self.last_open_trade_time
+            if own_pos_duration > timedelta(minutes=2) and own_pos_duration < timedelta(minutes=5):
+                # 开仓后的第3、4分钟检查，如果下跌超过6个点，尽快止损
+                if self.last_open_cost - bar.close_price > 4.8:
+                    self.sell(bar.close_price, abs(self.pos))
+                    self.write_log(f"[stop loss] close position at {bar.close_price}")
+                    self.put_event()
+                    return
+
+            # 【开仓中期】MA20开始渐渐上行，只要不连续2bar低于MA20就保持持仓
+            # 【止盈】RSI > 80 以后，一旦不上涨就止盈，止盈价格为前一bar close
+            # 【止盈】RSI > 86， bar close时止盈
+
             # 连续2bar低于ma20
             sell_cond:bool = self.count_pred(am.close < ma20_s, 2) >= 2
             if sell_cond:
@@ -194,6 +218,15 @@ class myBiasStrategy(CtaTemplate):
         
         self.put_event()
     
+    def get_open_price(self, bar:BarData, ma10:float, ma20:float):
+        """
+        确定开仓价，考虑回踩MA10
+        """
+        # 取MA10和MA20中较大者, 四舍五入（向上取整）后，再加op_offset_px
+        op_px = math.ceil( max(ma10, ma20) ) + self.op_offset_px
+        # op_px = round( max(ma10, ma20) ) + self.op_offset_px
+        return op_px
+
     
     def calc_bias_diff(self, ma1:np.ndarray, ma2:np.ndarray, ma3:np.ndarray) -> np.ndarray:
         close = self.am.close
@@ -239,6 +272,15 @@ class myBiasStrategy(CtaTemplate):
         """
         Callback of new trade data update.
         """
+        if trade.direction == Direction.LONG:
+            if trade.offset == Offset.OPEN:
+                self.last_open_trade_time = trade.datetime
+                self.last_open_cost = trade.price
+            else:
+                # reset last trade info
+                self.last_open_trade_time = None
+                self.last_open_cost = None
+        
         self.put_event()
 
     def on_stop_order(self, stop_order: StopOrder):
