@@ -79,17 +79,18 @@ class myBiasStrategy(CtaTemplate):
     last_open_trade_time:datetime = None
     last_open_cost:float = None
 
-    c1:bool = False
-    c2:bool = False
-    c3:bool = False
-    c4:bool = False
-    c5:bool = False
-    c6:bool = False
+    c1 = 0
+    c2 = 0
+    c3 = 0
+    c4 = 0
+    c5 = 0
+    c6 = 0
     
     diff_bias = 0
     rsi1 = 0
     roc_4 = 0
     
+    loading_hist_bars:bool = False
 
     parameters = ["rsi_p", "bias_p1", "bias_p2", "bias_n2", "roc_p", "op_offset_px"]
 
@@ -108,7 +109,11 @@ class myBiasStrategy(CtaTemplate):
         Callback when strategy is inited.
         """
         self.write_log("策略初始化")
-        self.load_bar(120, use_database=True)
+        try:
+            self.loading_hist_bars = True
+            self.load_bar(10, use_database=True)
+        finally:
+            self.loading_hist_bars = False
 
     def on_start(self):
         """
@@ -141,6 +146,9 @@ class myBiasStrategy(CtaTemplate):
         if not am.inited:
             return
         
+        if self.loading_hist_bars:
+            return
+        
         ma5_s = am.sma(self.N1, array=True)
         ma10_s = am.sma(self.N2, array=True)
         ma20_s = am.sma(self.N3, array=True)
@@ -165,25 +173,25 @@ class myBiasStrategy(CtaTemplate):
         ma20_is_up = self.ma_up(ma20_s, 2)
         close_above_ma60 = bar.close_price > self.ma60
         # 中短期均线向上
-        self.c1 = ma5_is_up and ma10_is_up and ma20_is_up and close_above_ma60
+        self.c1 = int(ma5_is_up and ma10_is_up and ma20_is_up and close_above_ma60)
 
         # diff_bias 在N1周期内至少1个小于bias_p1
         c2_count = self.count_pred(diff_bias_s < self.bias_p1, self.N1)
-        self.c2 = c2_count > 0
+        self.c2 = int(c2_count > 0)
         
         # rsi(5) 小于 rsi_p
-        self.c3 = self.rsi1 < self.rsi_p
+        self.c3 = int(self.rsi1 < self.rsi_p)
         
         # 开仓时在BIAS_N2个周期内，MyBIAS没有大于BIAS_P2的值
         c4_count = self.count_pred(diff_bias_s > self.bias_p2, self.N2)
-        self.c4 = c4_count < 1
+        self.c4 = int(c4_count < 1)
         
         close_above_ma120 = bar.close_price > self.ma120
         # 价格位于中长期均线之上
-        self.c5 = close_above_ma120
+        self.c5 = int(close_above_ma120)
 
         # 开仓时最近4bar涨幅/跌幅小于0.35%
-        self.c6 = self.roc_4 < self.roc_p
+        self.c6 = int(self.roc_4 < self.roc_p)
         
         if self.pos == 0:
             if self.c1 and self.c2 and self.c3 and self.c4 and self.c5 and self.c6:
@@ -197,14 +205,15 @@ class myBiasStrategy(CtaTemplate):
         elif self.pos > 0:
 
             # 【开仓初期】开仓5分钟内，回撤一定程度需要尽快平仓
-            own_pos_duration = bar.datetime - self.last_open_trade_time
-            if own_pos_duration > timedelta(minutes=2) and own_pos_duration < timedelta(minutes=5):
-                # 开仓后的第3、4分钟检查，如果下跌超过6个点，尽快止损
-                if self.last_open_cost - bar.close_price > 4.8:
-                    self.sell(bar.close_price, abs(self.pos))
-                    self.write_log(f"[stop loss] close position at {bar.close_price}")
-                    self.put_event()
-                    return
+            if self.last_open_trade_time is not None and self.last_open_cost is not None:
+                own_pos_duration = bar.datetime - self.last_open_trade_time
+                if own_pos_duration > timedelta(minutes=2) and own_pos_duration < timedelta(minutes=5):
+                    # 开仓后的第3、4分钟检查，如果下跌超过6个点，尽快止损
+                    if self.last_open_cost - bar.close_price > 4.8:
+                        self.sell(bar.close_price, abs(self.pos))
+                        self.write_log(f"[stop loss] close position at {bar.close_price}")
+                        self.put_event()
+                        return
 
             # 【开仓中期】MA20开始渐渐上行，只要不连续2bar低于MA20就保持持仓
             # 【止盈】RSI > 80 以后，一旦不上涨就止盈，止盈价格为前一bar close
