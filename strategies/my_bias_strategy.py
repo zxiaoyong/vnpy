@@ -171,9 +171,10 @@ class myBiasStrategy(CtaTemplate):
         ma5_is_up = self.ma_up(ma5_s)
         ma10_is_up = self.ma_up(ma10_s)
         ma20_is_up = self.ma_up(ma20_s, 2)
+        close_above_ma20 = bar.close_price > self.ma20
         close_above_ma60 = bar.close_price > self.ma60
         # 中短期均线向上
-        self.c1 = int(ma5_is_up and ma10_is_up and ma20_is_up and close_above_ma60)
+        self.c1 = int(ma5_is_up and ma10_is_up and ma20_is_up and close_above_ma20 and close_above_ma60)
 
         # diff_bias 在N1周期内至少1个小于bias_p1
         c2_count = self.count_pred(diff_bias_s < self.bias_p1, self.N1)
@@ -217,8 +218,19 @@ class myBiasStrategy(CtaTemplate):
 
             # 【开仓中期】MA20开始渐渐上行，只要不连续2bar低于MA20就保持持仓
             # 【止盈】RSI > 80 以后，一旦不上涨就止盈，止盈价格为前一bar close
+            if self.rsi1 > 80 and self.ma_down(self.am.close):
+                self.sell(bar.close_price, abs(self.pos))
+                self.write_log(f"[stop gain 1] close position at {bar.close_price}")
+                self.put_event()
+                return
+            
             # 【止盈】RSI > 86， bar close时止盈
-
+            if self.rsi1 > 86:
+                self.sell(bar.close_price, abs(self.pos))
+                self.write_log(f"[stop gain 2] close position at {bar.close_price}")
+                self.put_event()
+                return
+            
             # 连续2bar低于ma20
             sell_cond:bool = self.count_pred(am.close < ma20_s, 2) >= 2
             if sell_cond:
