@@ -13,7 +13,7 @@ import math
 import numpy as np
 from datetime import datetime, time, timedelta
 
-from vnpy.trader.constant import Direction, Offset
+from vnpy.trader.constant import Direction, Offset, Status
 
 # Define the start and end times
 trd_start_time = time(10, 0, 0)  # 10:00 AM
@@ -174,7 +174,7 @@ class myBiasStrategy(CtaTemplate):
         close_above_ma20 = bar.close_price > self.ma20
         close_above_ma60 = bar.close_price > self.ma60
         # 中短期均线向上
-        self.c1 = int(ma5_is_up and ma10_is_up and ma20_is_up and close_above_ma20 and close_above_ma60)
+        self.c1 = int(ma5_is_up and ma10_is_up and ma20_is_up and close_above_ma20 and close_above_ma60 and self.ma20 > self.ma120)
 
         # diff_bias 在N1周期内至少1个小于bias_p1
         c2_count = self.count_pred(diff_bias_s < self.bias_p1, self.N1)
@@ -286,8 +286,9 @@ class myBiasStrategy(CtaTemplate):
         """
         Callback of new order data update.
         """
-        msg:str = f'{order.direction} {order.offset} {order.symbol}'
-        self.write_log(msg)
+        if order.status != Status.SUBMITTING and order.status != Status.NOTTRADED:
+            msg:str = f'{order.direction} {order.offset} {order.symbol} {order.status}'
+            self.write_log(msg)
 
     def on_trade(self, trade: TradeData):
         """
