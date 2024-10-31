@@ -169,12 +169,16 @@ class myBiasStrategy(CtaTemplate):
         self.roc_4 = am.roc(4)
         
         ma5_is_up = self.ma_up(ma5_s)
-        ma10_is_up = self.ma_up(ma10_s)
+        ma10_is_up = self.ma_up(ma10_s, 2)
         ma20_is_up = self.ma_up(ma20_s, 2)
+        ma30_is_up = self.ma_up(ma30_s, 3)
         close_above_ma20 = bar.close_price > self.ma20
         close_above_ma60 = bar.close_price > self.ma60
+        ma60_above_ma120 = self.ma60 > self.ma120 * 0.999
         # 中短期均线向上
-        self.c1 = int(ma5_is_up and ma10_is_up and ma20_is_up and close_above_ma20 and close_above_ma60 and self.ma20 > self.ma120)
+        self.c1 = int(ma5_is_up and ma10_is_up and ma20_is_up and ma30_is_up and
+                      close_above_ma20 and close_above_ma60 and self.ma20 > self.ma120
+                      and ma60_above_ma120)
 
         # diff_bias 在N1周期内至少1个小于bias_p1
         c2_count = self.count_pred(diff_bias_s < self.bias_p1, self.N1)
