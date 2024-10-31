@@ -199,6 +199,7 @@ class myBiasStrategy(CtaTemplate):
         self.c6 = int(self.roc_4 < self.roc_p)
         
         if self.pos == 0:
+            # print(f"{bar.datetime} c1:{self.c1} c2:{self.c2} c3:{self.c3} c4:{self.c4} c5:{self.c5} c6:{self.c6}")
             if self.c1 and self.c2 and self.c3 and self.c4 and self.c5 and self.c6:
                 if is_between_10_and_14(bar.datetime):
                     op_px = self.get_open_price(bar, self.ma10, self.ma20)
