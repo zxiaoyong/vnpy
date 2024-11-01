@@ -85,6 +85,13 @@ class myBiasStrategy(CtaTemplate):
     c4 = 0
     c5 = 0
     c6 = 0
+
+    s1 = 0
+    s2 = 0
+    s3 = 0
+    s4 = 0
+    s5 = 0
+    s6 = 0
     
     diff_bias = 0
     rsi1 = 0
@@ -197,6 +204,38 @@ class myBiasStrategy(CtaTemplate):
 
         # 开仓时最近4bar涨幅/跌幅小于0.35%
         self.c6 = int(self.roc_4 < self.roc_p)
+
+        # 空头开仓条件 Begin
+        ma5_is_down = self.ma_down(ma5_s)
+        ma10_is_down = self.ma_down(ma10_s, 2)
+        ma20_is_down = self.ma_down(ma20_s, 2)
+        ma30_is_down = self.ma_down(ma30_s, 3)
+        close_below_ma20 = bar.close_price < self.ma20
+        close_below_ma60 = bar.close_price < self.ma60
+        ma60_below_ma120 = self.ma60 < self.ma120 * 1.001
+        # 中短期均线向向下
+        self.s1 = int(ma5_is_down and ma10_is_down and ma20_is_down and ma30_is_down and
+                      close_below_ma20 and close_below_ma60 and self.ma20 < self.ma120
+                      and ma60_below_ma120)
+
+        # diff_bias 在N1周期内至少1个小于bias_p1
+        s2_count = self.count_pred(diff_bias_s < self.bias_p1, self.N1)
+        self.s2 = int(s2_count > 0)
+        
+        # rsi(5) 大于 95-rsi_p
+        self.s3 = int(self.rsi1 > (95 - self.rsi_p))
+        
+        # 开仓时在BIAS_N2个周期内，MyBIAS没有大于BIAS_P2的值
+        s4_count = self.count_pred(diff_bias_s > self.bias_p2, self.N2)
+        self.s4 = int(s4_count < 1)
+        
+        close_below_ma120 = bar.close_price < self.ma120
+        # 价格位于中长期均线之上
+        self.s5 = int(close_below_ma120)
+
+        # 开仓时最近4bar跌幅小于-0.35%
+        self.s6 = int(self.roc_4 > -self.roc_p)
+        # 空头开仓条件 End
         
         if self.pos == 0:
             # print(f"{bar.datetime} c1:{self.c1} c2:{self.c2} c3:{self.c3} c4:{self.c4} c5:{self.c5} c6:{self.c6}")
@@ -207,6 +246,9 @@ class myBiasStrategy(CtaTemplate):
                     self.write_log(f"buy at {op_px}")
                 else:
                     self.write_log("不在交易时间10:00-14:00")
+            elif self.s1 and self.s2 and self.s3 and self.s4 and self.s5 and self.s6:
+                # open short position
+                pass # todo
 
         elif self.pos > 0:
 
