@@ -16,8 +16,8 @@ from datetime import datetime, time, timedelta
 from vnpy.trader.constant import Direction, Offset, Status
 
 # Define the start and end times
-trd_start_time = time(10, 0, 0)  # 10:00 AM
-trd_end_time = time(14, 0, 0)    # 2:00 PM
+trd_start_time = time(9, 45, 0)  # 10:00 AM
+trd_end_time = time(14, 45, 0)    # 2:00 PM
 
 def is_between_10_and_14(dt:datetime):
 
@@ -238,19 +238,22 @@ class myBiasStrategy(CtaTemplate):
         # 空头开仓条件 End
         
         if self.pos == 0:
-            if is_between_10_and_14(bar.datetime):
-                # print(f"{bar.datetime} c1:{self.c1} c2:{self.c2} c3:{self.c3} c4:{self.c4} c5:{self.c5} c6:{self.c6}")
-                if self.c1 and self.c2 and self.c3 and self.c4 and self.c5 and self.c6:
+            # print(f"{bar.datetime} c1:{self.c1} c2:{self.c2} c3:{self.c3} c4:{self.c4} c5:{self.c5} c6:{self.c6}")
+            if self.c1 and self.c2 and self.c3 and self.c4 and self.c5 and self.c6:
+                if is_between_10_and_14(bar.datetime):
                     op_px = self.get_open_long_price(bar, self.ma10, self.ma20)
                     self.buy(op_px, self.fixed_size)
                     self.write_log(f"[LONG] buy at {op_px}")
-                elif self.s1 and self.s2 and self.s3 and self.s4 and self.s5 and self.s6:
+                else:
+                    self.write_log("不在交易时间10:00-14:00")
+            elif self.s1 and self.s2 and self.s3 and self.s4 and self.s5 and self.s6:
+                if is_between_10_and_14(bar.datetime):
                     # open short position
                     op_px = self.get_open_short_price(bar, self.ma10, self.ma20)
                     self.short(op_px, self.fixed_size)
                     self.write_log(f"[SHORT] sell at {op_px}")
-            else:    
-                self.write_log("不在交易时间10:00-14:00")
+                else:
+                    self.write_log("不在交易时间10:00-14:30")
 
         elif self.pos > 0:
 
@@ -317,6 +320,7 @@ class myBiasStrategy(CtaTemplate):
         # 取MA10和MA20中较大者, 四舍五入（向上取整）后，再加op_offset_px
         op_px = math.ceil( max(ma10, ma20) ) + self.op_offset_px
         # op_px = round( max(ma10, ma20) ) + self.op_offset_px
+        op_px = min(bar.close_price, op_px) # 多单开仓价不超过前收价
         return op_px
 
     def get_open_short_price(self, bar:BarData, ma10:float, ma20:float):
@@ -325,6 +329,7 @@ class myBiasStrategy(CtaTemplate):
         """
         # 取MA10和MA20中较小者, 四舍五入（向下取整）后，再减op_offset_px
         op_px = math.floor( min(ma10, ma20) ) - self.op_offset_px
+        op_px = max(bar.close_price, op_px) # 多单开仓价不小于前收价
         return op_px
     
     def calc_bias_diff(self, ma1:np.ndarray, ma2:np.ndarray, ma3:np.ndarray) -> np.ndarray:
