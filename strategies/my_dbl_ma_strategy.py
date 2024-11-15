@@ -9,6 +9,7 @@ from vnpy_ctastrategy import (
     ArrayManager,
 )
 
+from vnpy.trader.constant import Direction, Offset, Status
 
 class myDoubleMaStrategy(CtaTemplate):
     """"""
@@ -23,6 +24,10 @@ class myDoubleMaStrategy(CtaTemplate):
 
     slow_ma0 = 0.0
     slow_ma1 = 0.0
+    
+    ma_long = 0.0
+    closing_long:bool = False
+    closing_short:bool = False
 
     parameters = ["fast_window", "slow_window"]
     variables = ["fast_ma0", "fast_ma1", "slow_ma0", "slow_ma1"]
@@ -32,7 +37,7 @@ class myDoubleMaStrategy(CtaTemplate):
         super().__init__(cta_engine, strategy_name, vt_symbol, setting)
 
         self.bg = BarGenerator(self.on_bar)
-        self.am = ArrayManager()
+        self.am = ArrayManager(size=150)
 
     def on_init(self):
         """
@@ -80,23 +85,31 @@ class myDoubleMaStrategy(CtaTemplate):
         slow_ma = am.sma(self.slow_window, array=True)
         self.slow_ma0 = slow_ma[-1]
         self.slow_ma1 = slow_ma[-2]
+        
+        self.ma_long = am.sma(120)
 
         cross_over = self.fast_ma0 > self.slow_ma0 and self.fast_ma1 < self.slow_ma1
         cross_below = self.fast_ma0 < self.slow_ma0 and self.fast_ma1 > self.slow_ma1
 
-        if cross_over:
+        if cross_over and bar.close_price > self.ma_long:
             if self.pos == 0:
                 self.buy(bar.close_price, 1)
             elif self.pos < 0:
                 self.cover(bar.close_price, 1)
-                # self.buy(bar.close_price, 1)
+                self.closing_short = True
 
-        elif cross_below:
+        elif cross_below and bar.close_price < self.ma_long:
             if self.pos == 0:
                 self.short(bar.close_price, 1)
             elif self.pos > 0:
                 self.sell(bar.close_price, 1)
-                # self.short(bar.close_price, 1)
+                self.closing_long = True
+
+        elif self.closing_long:
+            self.sell(bar.close_price, 1)
+        elif self.closing_short:
+            self.cover(bar.close_price, 1)
+            
 
         self.put_event()
 
@@ -104,7 +117,12 @@ class myDoubleMaStrategy(CtaTemplate):
         """
         Callback of new order data update.
         """
-        pass
+        if order.status == Status.ALLTRADED and order.offset == Offset.CLOSE:
+            if order.direction == Direction.LONG:
+                self.closing_short = False
+            elif order.direction == Direction.SHORT:
+                self.closing_long = False
+                
 
     def on_trade(self, trade: TradeData):
         """
