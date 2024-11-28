@@ -88,19 +88,21 @@ class myDoubleMaStrategy(CtaTemplate):
         
         self.ma_long = am.sma(120)
 
-        cross_over = self.fast_ma0 > self.slow_ma0 and self.fast_ma1 < self.slow_ma1
-        cross_below = self.fast_ma0 < self.slow_ma0 and self.fast_ma1 > self.slow_ma1
+        cross_over = self.fast_ma0 > self.slow_ma0 #and self.fast_ma1 < self.slow_ma1
+        cross_below = self.fast_ma0 < self.slow_ma0 #and self.fast_ma1 > self.slow_ma1
 
-        if cross_over and bar.close_price > self.ma_long:
+        if cross_over:
             if self.pos == 0:
-                self.buy(bar.close_price, 1)
+                if bar.close_price > self.ma_long:
+                    self.buy(bar.close_price, 1)
             elif self.pos < 0:
                 self.cover(bar.close_price, 1)
                 self.closing_short = True
 
-        elif cross_below and bar.close_price < self.ma_long:
+        elif cross_below:
             if self.pos == 0:
-                self.short(bar.close_price, 1)
+                if bar.close_price < self.ma_long:
+                    self.short(bar.close_price, 1)
             elif self.pos > 0:
                 self.sell(bar.close_price, 1)
                 self.closing_long = True
