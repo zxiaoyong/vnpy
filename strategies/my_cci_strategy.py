@@ -73,8 +73,8 @@ class myCciStrategy(CtaTemplate):
     dif_sum = 0 # 均线差值之和
     dif_ma = 0 # 均线差值和的Moving Average
     
-    cci = 0 
-    cci_ma = 0 # cci 10日平均
+    cci:float = 0 
+    cci_ma:float = 0 # cci 10日平均
 
     c1 = 0
     c2 = 0
@@ -156,6 +156,18 @@ class myCciStrategy(CtaTemplate):
         diff_ma = self.calc_diff_sum()
         # SUM_DIFF > 30
         LC1:bool = diff_ma > self.dif_p
+        
+        cci, cci_ma = self.calc_cci()
+        # CCI > 75 AND CCI > CCI_MA
+        LC2:bool = cci > self.cci_p and cci > cci_ma
+        
+        macd = self.calc_my_macd(self.ma10_s, self.ma30_s, MID_P=10)
+        # MACD柱 连续2根数值增长
+        LC3:bool = self.ma_up(macd, 2)
+        
+        rsi = self.calc_rsi(self.N1)
+        # RSI < 85
+        LC4:bool = rsi < self.rsi_p
         
         diff_bias_s:np.ndarray = self.calc_bias_diff(self.ma5_s, self.ma10_s, self.ma20_s)
         self.diff_bias = diff_bias_s[-1]
@@ -331,7 +343,7 @@ class myCciStrategy(CtaTemplate):
         self.ma120_s = am.sma(self.N6, array=True)
         self.ma250_s = am.sma(self.N7, array=True)
 
-    def calc_diff_sum(self, DIF_M_P:int = 10):
+    def calc_diff_sum(self, DIF_M_P:int = 10) -> float:
         '''计算均线距离之和以及移动平均
         MA_DIF1:=MA10/MA20-1;
         MA_DIF2:=MA20/MA30-1;
@@ -372,6 +384,31 @@ class myCciStrategy(CtaTemplate):
         avg_bias = (bias1 + bias2 + bias3) / 3
         diff_bias = abs(bias1 - avg_bias) + abs(bias2 - avg_bias) + abs(bias3 - avg_bias)
         return diff_bias
+    
+    def calc_cci(self, CCI_M_P:int = 10) -> tuple[float, float]:
+        '''计算CCI指标'''
+        am = self.am
+        cci_s:np.ndarray = am.cci(14, array=True)
+        self.cci = cci_s[-1]
+        cci_ma_s:np.ndarray = talib.SMA(cci_s, CCI_M_P)
+        self.cci_ma = cci_ma_s[-1]
+        return self.cci, self.cci_ma
+    
+    def calc_rsi(self, RSI_P:int = 5) -> float:
+        am = self.am
+        rsi_val =  am.rsi(RSI_P)
+        return rsi_val
+
+    def calc_my_macd(self, MA_SHORT:np.ndarray, MA_LONG:np.ndarray, MID_P:int = 10) -> np.ndarray:
+        '''计算定制MACD
+        DIF:=100*(MA(CLOSE,SHORT)/MA(CLOSE,LONG)-1);
+        DEA:=MA(DIF,MID);
+        MACD:=DIF-DEA;
+        '''
+        dif_s:np.ndarray = 100 * ( MA_SHORT / MA_LONG - 1)
+        dea_s:np.ndarray = talib.SMA(dif_s, MID_P)
+        macd_s:np.ndarray = dif_s - dea_s
+        return macd_s
 
     def count_pred(self, pred:np.ndarray, n:int) -> int:
         arr_len = pred.size
