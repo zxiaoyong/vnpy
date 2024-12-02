@@ -41,8 +41,8 @@ class myCciStrategy(CtaTemplate):
     dif_p = 30
     # CCI_P: 10-500, 75      开仓时CCI值大于此值
     cci_p = 75
-    # BIAS_P: 0.01-10, 0.3     开仓时DIFF_BIAS小于此值
-    bias_p = 0.3
+    # BIAS_P: 0.01-10, 0.2     开仓时DIFF_BIAS小于此值
+    bias_p = 0.2
     # RSI_P: 0-100, 85    开仓时RSI值小于此值
     rsi_p = 85
     
@@ -165,7 +165,7 @@ class myCciStrategy(CtaTemplate):
         LC:list[bool] = [False] * 8  # 多头条件列表
         diff_ma = self.calc_diff_sum()
         # SUM_DIFF > 30     -- L6c
-        LC[1] = diff_ma > self.dif_p
+        LC[1] = diff_ma > self.dif_p and diff_ma < 80
         
         cci, cci_ma = self.calc_cci()
         # CCI > 75 AND CCI > CCI_MA     -- L4
@@ -183,7 +183,7 @@ class myCciStrategy(CtaTemplate):
         self.bias1 = bias1_s[-1]
         self.diff_bias = diff_bias_s[-1]
         # C1:=ABS(BIAS1)<(BIAS_P-0.1) AND DIFF_BIAS<BIAS_P      -- C1
-        LC[5] = abs(self.bias1) < (self.bias_p - 0.1) and self.diff_bias < self.bias_p
+        LC[5] = abs(self.bias1) < (self.bias_p - 0.05) and self.diff_bias < self.bias_p
 
         ma5_is_up = self.ma_up(self.ma5_s)
         ma10_is_up = self.ma_up(self.ma10_s, 2)
@@ -255,7 +255,7 @@ class myCciStrategy(CtaTemplate):
                     op_px = self.get_open_long_price(bar, self.ma10, self.ma20)
                     self.buy(op_px, self.fixed_size)
                     self.write_log(f"[LONG] buy at {op_px}")
-                    print(f"{bar.datetime} diff_ma:{diff_ma} bias1:{self.bias1} diff_bias:{self.diff_bias} cci:{cci} rsi:{rsi} macd:{macd[-1]}")
+                    print(f"{bar.datetime} diff_ma:{diff_ma:.2f} bias1:{self.bias1:.2f} diff_bias:{self.diff_bias:.2f} cci:{cci:.2f} rsi:{rsi:.2f} macd:{macd[-1]:.2f}")
                 else:
                     self.write_log("不在交易时间10:00-14:00")
             elif all(SC):
