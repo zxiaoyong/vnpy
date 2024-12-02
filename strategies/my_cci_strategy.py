@@ -255,6 +255,7 @@ class myCciStrategy(CtaTemplate):
                     op_px = self.get_open_long_price(bar, self.ma10, self.ma20)
                     self.buy(op_px, self.fixed_size)
                     self.write_log(f"[LONG] buy at {op_px}")
+                    print(f"{bar.datetime} diff_ma:{diff_ma} bias1:{self.bias1} diff_bias:{self.diff_bias} cci:{cci} rsi:{rsi} macd:{macd[-1]}")
                 else:
                     self.write_log("不在交易时间10:00-14:00")
             elif all(SC):
