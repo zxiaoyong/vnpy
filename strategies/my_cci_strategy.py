@@ -37,8 +37,10 @@ class myCciStrategy(CtaTemplate):
     author = "ZXY"
 
     # parameters:
-    # DIF_P: 1-500, 30         开仓是SUM_DIFF大于此值
-    dif_p = 30
+    # DIF_LO_P: 1-500, 30         开仓是SUM_DIFF大于此值
+    dif_lower_p = 30
+    # DIF_UP_P: 1-500, 80         开仓是SUM_DIFF小于此值
+    dif_upper_p = 80
     # CCI_P: 10-500, 75      开仓时CCI值大于此值
     cci_p = 75
     # BIAS_P: 0.01-10, 0.2     开仓时DIFF_BIAS小于此值
@@ -104,7 +106,7 @@ class myCciStrategy(CtaTemplate):
     
     loading_hist_bars:bool = False
 
-    parameters = ["dif_p", "cci_p", "bias_p", "rsi_p", "op_offset_px"]
+    parameters = ["dif_lower_p", "dif_upper_p", "cci_p", "bias_p", "rsi_p", "op_offset_px"]
 
     variables = ["ma20", "dif_sum", "cci", "bias1", "diff_bias", "rsi1",
                  "c1", "c2", "c3", "c4", "c5", "c6"]
@@ -165,7 +167,7 @@ class myCciStrategy(CtaTemplate):
         LC:list[bool] = [False] * 8  # 多头条件列表
         diff_ma = self.calc_diff_sum()
         # SUM_DIFF > 30     -- L6c
-        LC[1] = diff_ma > self.dif_p and diff_ma < 80
+        LC[1] = diff_ma > self.dif_lower_p and diff_ma < self.dif_upper_p
         
         cci, cci_ma = self.calc_cci()
         # CCI > 75 AND CCI > CCI_MA     -- L4
@@ -214,7 +216,7 @@ class myCciStrategy(CtaTemplate):
         ### 空头开仓条件 BEGIN
         SC:list[bool] = [False] * 8  # 多头条件列表
         # SUM_DIFF < -30     -- S6
-        SC[1] = diff_ma < -self.dif_p
+        SC[1] = diff_ma < -self.dif_lower_p
         # CCI < -75 AND CCI < CCI_MA     -- S4
         SC[2] = cci < -self.cci_p and cci < cci_ma
         # MACD柱 连续2根数值减少     -- S7
