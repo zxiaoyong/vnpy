@@ -16,8 +16,9 @@ import talib
 from vnpy.trader.constant import Direction, Offset, Status
 
 # Define the start and end times
-trd_start_time = time(9, 45, 0)  # 10:00 AM
-trd_end_time = time(14, 45, 0)    # 2:00 PM
+trd_start_time = time(9, 45, 0)  # 9:45 AM
+trd_end_time = time(14, 45, 0)    # 2:45 PM
+force_close_time = time(14, 55, 0) # 2:55 PM
 
 def is_between_10_and_14(dt:datetime):
 
@@ -26,6 +27,10 @@ def is_between_10_and_14(dt:datetime):
 
     # Check if the current_time is between start_time and end_time
     return trd_start_time <= current_time <= trd_end_time
+
+def is_market_close(dt:datetime):
+    current_time = dt.time()
+    return current_time >= force_close_time
 
 class myCciStrategy(CtaTemplate):
     """"""
@@ -208,8 +213,8 @@ class myCciStrategy(CtaTemplate):
         
         ### 空头开仓条件 BEGIN
         SC:list[bool] = [False] * 8  # 多头条件列表
-        # SUM_DIFF < 30     -- S6
-        SC[1] = diff_ma < self.dif_p
+        # SUM_DIFF < -30     -- S6
+        SC[1] = diff_ma < -self.dif_p
         # CCI < -75 AND CCI < CCI_MA     -- S4
         SC[2] = cci < -self.cci_p and cci < cci_ma
         # MACD柱 连续2根数值减少     -- S7
@@ -256,12 +261,18 @@ class myCciStrategy(CtaTemplate):
                 if is_between_10_and_14(bar.datetime):
                     # open short position
                     op_px = self.get_open_short_price(bar, self.ma10, self.ma20)
-                    self.short(op_px, self.fixed_size)
+                    # self.short(op_px, self.fixed_size)
                     self.write_log(f"[SHORT] sell at {op_px}")
                 else:
                     self.write_log("不在交易时间10:00-14:30")
 
         elif self.pos > 0:
+            
+            if is_market_close(bar.datetime):
+                self.sell(bar.close_price, abs(self.pos))
+                self.write_log(f"close position before marekt close")
+                self.put_event()
+                return
 
             # 【开仓初期】开仓5分钟内，回撤一定程度需要尽快平仓
             if self.last_open_trade_time is not None and self.last_open_cost is not None:
@@ -296,6 +307,12 @@ class myCciStrategy(CtaTemplate):
                 self.write_log(f"close position at {bar.close_price}")
         
         elif self.pos < 0:
+            if is_market_close(bar.datetime):
+                self.cover(bar.close_price, abs(self.pos))
+                self.write_log(f"close position before marekt close")
+                self.put_event()
+                return
+            
             # 【开空单中期】MA20开始渐渐下行，只要不连续2bar高于MA20就保持持仓
             # 【止盈】RSI < 80 以后，一旦不上涨就止盈，止盈价格为前一bar close
             if self.rsi1 < 20 and self.ma_up(self.am.close):
@@ -327,7 +344,7 @@ class myCciStrategy(CtaTemplate):
         op_px = math.ceil( max(ma10, ma20) ) + self.op_offset_px
         # op_px = round( max(ma10, ma20) ) + self.op_offset_px
         op_px = min(bar.close_price, op_px) # 多单开仓价不超过前收价
-        return op_px
+        return bar.close_price
 
     def get_open_short_price(self, bar:BarData, ma10:float, ma20:float):
         """
@@ -336,7 +353,7 @@ class myCciStrategy(CtaTemplate):
         # 取MA10和MA20中较小者, 四舍五入（向下取整）后，再减op_offset_px
         op_px = math.floor( min(ma10, ma20) ) - self.op_offset_px
         op_px = max(bar.close_price, op_px) # 多单开仓价不小于前收价
-        return op_px
+        return bar.close_price
 
     def calc_ma_series(self):
         '''计算需要的均线序列'''
