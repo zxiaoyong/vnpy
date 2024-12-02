@@ -99,9 +99,9 @@ class myCciStrategy(CtaTemplate):
     
     loading_hist_bars:bool = False
 
-    parameters = ["rsi_p", "cci_p", "dif_p", "op_offset_px"]
+    parameters = ["dif_p", "cci_p", "bias_p", "rsi_p", "op_offset_px"]
 
-    variables = ["ma5", "ma10", "ma20", "ma30", "diff_bias", "rsi1", "roc_4",
+    variables = ["ma20", "dif_sum", "cci", "bias1", "diff_bias", "rsi1",
                  "c1", "c2", "c3", "c4", "c5", "c6"]
 
     def __init__(self, cta_engine, strategy_name, vt_symbol, setting):
@@ -157,9 +157,9 @@ class myCciStrategy(CtaTemplate):
         self.calc_ma_series()
         
         ### 多头开仓条件 BEGIN
-        LC:list[bool] = []  # 多头条件列表
+        LC:list[bool] = [False] * 8  # 多头条件列表
         diff_ma = self.calc_diff_sum()
-        # SUM_DIFF > 30     -- L6
+        # SUM_DIFF > 30     -- L6c
         LC[1] = diff_ma > self.dif_p
         
         cci, cci_ma = self.calc_cci()
@@ -196,18 +196,18 @@ class myCciStrategy(CtaTemplate):
         LC[7] = close_above_ma20 and close_above_ma60 and ma20_above_ma60
         
         # 中期均线与长期均线一致       -- L3
-        LC[8] = ma20_is_up or ma30_is_up
+        LC[0] = ma20_is_up or ma30_is_up
         
         self.c1 = int(LC[1])
         self.c2 = int(LC[2])
         self.c3 = int(LC[3])
         self.c4 = int(LC[4])
         self.c5 = int(LC[5])
-        self.c6 = int(LC[6] and LC[7] and LC[8])
+        self.c6 = int(LC[6] and LC[7] and LC[0])
         ### 多头开仓条件 END
         
         ### 空头开仓条件 BEGIN
-        SC:list[bool] = []  # 多头条件列表
+        SC:list[bool] = [False] * 8  # 多头条件列表
         # SUM_DIFF < 30     -- S6
         SC[1] = diff_ma < self.dif_p
         # CCI < -75 AND CCI < CCI_MA     -- S4
@@ -233,14 +233,14 @@ class myCciStrategy(CtaTemplate):
         SC[7] = close_below_ma20 and close_below_ma60 and ma20_below_ma60
         
         # 中期均线与长期均线一致       -- S3
-        SC[8] = ma20_is_down or ma30_is_down
+        SC[0] = ma20_is_down or ma30_is_down
         
         self.s1 = int(SC[1])
         self.s2 = int(SC[2])
         self.s3 = int(SC[3])
         self.s4 = int(SC[4])
         self.s5 = int(SC[5])
-        self.s6 = int(SC[6] and SC[7] and SC[8])
+        self.s6 = int(SC[6] and SC[7] and SC[0])
         ### 空头开仓条件 END
         
         if self.pos == 0:
@@ -290,7 +290,7 @@ class myCciStrategy(CtaTemplate):
                 return
             
             # 连续2bar低于ma20
-            sell_cond:bool = self.count_pred(am.close < ma20_s, 2) >= 2
+            sell_cond:bool = self.count_pred(am.close < self.ma20_s, 2) >= 2
             if sell_cond:
                 self.sell(bar.close_price, abs(self.pos))
                 self.write_log(f"close position at {bar.close_price}")
@@ -312,7 +312,7 @@ class myCciStrategy(CtaTemplate):
                 return
             
             # 连续2bar高于ma20
-            sell_cond:bool = self.count_pred(am.close > ma20_s, 2) >= 2
+            sell_cond:bool = self.count_pred(am.close > self.ma20_s, 2) >= 2
             if sell_cond:
                 self.cover(bar.close_price, abs(self.pos))
                 self.write_log(f"close short position at {bar.close_price}")
