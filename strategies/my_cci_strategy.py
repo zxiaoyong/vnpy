@@ -32,12 +32,14 @@ class myCciStrategy(CtaTemplate):
     author = "ZXY"
 
     # parameters:
-    # CCI_P: 10-500, 75      开仓时CCI值大于此值
-    cci_p = 75
-    # RSI_P: 0-100, 85    开仓时RSI值小于此值
-    rsi_p = 85
     # DIF_P: 1-500, 30         开仓是SUM_DIFF大于此值
     dif_p = 30
+    # CCI_P: 10-500, 75      开仓时CCI值大于此值
+    cci_p = 75
+    # BIAS_P: 0.01-10, 0.3     开仓时DIFF_BIAS小于此值
+    bias_p = 0.3
+    # RSI_P: 0-100, 85    开仓时RSI值小于此值
+    rsi_p = 85
     
     op_offset_px = 1 # 开仓时回踩均线加价
 
@@ -90,6 +92,7 @@ class myCciStrategy(CtaTemplate):
     s5 = 0
     s6 = 0
     
+    bias1 = 0
     diff_bias = 0
     rsi1 = 0
     roc_4 = 0
@@ -153,99 +156,103 @@ class myCciStrategy(CtaTemplate):
         
         self.calc_ma_series()
         
+        ### 多头开仓条件 BEGIN
+        LC:list[bool] = []  # 多头条件列表
         diff_ma = self.calc_diff_sum()
-        # SUM_DIFF > 30
-        LC1:bool = diff_ma > self.dif_p
+        # SUM_DIFF > 30     -- L6
+        LC[1] = diff_ma > self.dif_p
         
         cci, cci_ma = self.calc_cci()
-        # CCI > 75 AND CCI > CCI_MA
-        LC2:bool = cci > self.cci_p and cci > cci_ma
+        # CCI > 75 AND CCI > CCI_MA     -- L4
+        LC[2] = cci > self.cci_p and cci > cci_ma
         
         macd = self.calc_my_macd(self.ma10_s, self.ma30_s, MID_P=10)
-        # MACD柱 连续2根数值增长
-        LC3:bool = self.ma_up(macd, 2)
+        # MACD柱 连续2根数值增长     -- L7
+        LC[3] = self.ma_up(macd, 2)
         
         rsi = self.calc_rsi(self.N1)
-        # RSI < 85
-        LC4:bool = rsi < self.rsi_p
+        # RSI < 85     -- L5
+        LC[4] = rsi < self.rsi_p
         
-        diff_bias_s:np.ndarray = self.calc_bias_diff(self.ma5_s, self.ma10_s, self.ma20_s)
+        bias1_s, diff_bias_s = self.calc_bias_diff(self.ma5_s, self.ma10_s, self.ma20_s)
+        self.bias1 = bias1_s[-1]
         self.diff_bias = diff_bias_s[-1]
-        self.rsi1 = am.rsi(self.N1)
-        self.roc_4 = am.roc(4)
-        
+        # C1:=ABS(BIAS1)<(BIAS_P-0.1) AND DIFF_BIAS<BIAS_P      -- C1
+        LC[5] = abs(self.bias1) < (self.bias_p - 0.1) and self.diff_bias < self.bias_p
+
         ma5_is_up = self.ma_up(self.ma5_s)
         ma10_is_up = self.ma_up(self.ma10_s, 2)
         ma20_is_up = self.ma_up(self.ma20_s, 2)
         ma30_is_up = self.ma_up(self.ma30_s, 3)
         close_above_ma20 = bar.close_price > self.ma20
         close_above_ma60 = bar.close_price > self.ma60
+        ma20_above_ma60 = self.ma20 > self.ma60
         ma60_above_ma120 = self.ma60 > self.ma120 * 0.999
-        # 中短期均线向上
-        self.c1 = int(ma5_is_up and ma10_is_up and ma20_is_up and ma30_is_up and
-                      close_above_ma20 and close_above_ma60 and self.ma20 > self.ma120
-                      and ma60_above_ma120)
-
-        # diff_bias 在N1周期内至少1个小于bias_p1
-        c2_count = self.count_pred(diff_bias_s < self.bias_p1, self.N1)
-        self.c2 = int(c2_count > 0)
         
-        # rsi(5) 小于 rsi_p
-        self.c3 = int(self.rsi1 < self.rsi_p)
+        # 中长期均线多排 MA60 > MA120      -- L1
+        LC[6] = ma60_above_ma120
         
-        # 开仓时在BIAS_N2个周期内，MyBIAS没有大于BIAS_P2的值
-        c4_count = self.count_pred(diff_bias_s > self.bias_p2, self.N2)
-        self.c4 = int(c4_count < 1)
+        # k线在中长期均线之上 CLOSE > MA20 AND CLOSE > MA60 AND MA20 > MA60     -- L2
+        LC[7] = close_above_ma20 and close_above_ma60 and ma20_above_ma60
         
-        close_above_ma120 = bar.close_price > self.ma120
-        # 价格位于中长期均线之上
-        self.c5 = int(close_above_ma120)
-
-        # 开仓时最近4bar涨幅/跌幅小于0.35%
-        self.c6 = int(self.roc_4 < self.roc_p)
-
-        # 空头开仓条件 Begin
-        ma5_is_down = self.ma_down(ma5_s)
-        ma10_is_down = self.ma_down(ma10_s, 2)
-        ma20_is_down = self.ma_down(ma20_s, 2)
-        ma30_is_down = self.ma_down(ma30_s, 3)
+        # 中期均线与长期均线一致       -- L3
+        LC[8] = ma20_is_up or ma30_is_up
+        
+        self.c1 = int(LC[1])
+        self.c2 = int(LC[2])
+        self.c3 = int(LC[3])
+        self.c4 = int(LC[4])
+        self.c5 = int(LC[5])
+        self.c6 = int(LC[6] and LC[7] and LC[8])
+        ### 多头开仓条件 END
+        
+        ### 空头开仓条件 BEGIN
+        SC:list[bool] = []  # 多头条件列表
+        # SUM_DIFF < 30     -- S6
+        SC[1] = diff_ma < self.dif_p
+        # CCI < -75 AND CCI < CCI_MA     -- S4
+        SC[2] = cci < -self.cci_p and cci < cci_ma
+        # MACD柱 连续2根数值减少     -- S7
+        SC[3] = self.ma_down(macd, 2)
+        # RSI > 10   S5:=RSI1 > (95-RSI_P)  -- S5
+        SC[4] = rsi > (95 - self.rsi_p)
+        # C1:=ABS(BIAS1)<(BIAS_P-0.1) AND DIFF_BIAS<BIAS_P
+        SC[5] = LC[5]
+        
+        ma20_is_down = self.ma_down(self.ma20_s, 2)
+        ma30_is_down = self.ma_down(self.ma30_s, 3)
         close_below_ma20 = bar.close_price < self.ma20
         close_below_ma60 = bar.close_price < self.ma60
+        ma20_below_ma60 = self.ma20 < self.ma60
         ma60_below_ma120 = self.ma60 < self.ma120 * 1.001
-        # 中短期均线向向下
-        self.s1 = int(ma5_is_down and ma10_is_down and ma20_is_down and ma30_is_down and
-                      close_below_ma20 and close_below_ma60 and self.ma20 < self.ma120
-                      and ma60_below_ma120)
-
-        # diff_bias 在N1周期内至少1个小于bias_p1
-        s2_count = self.count_pred(diff_bias_s < self.bias_p1, self.N1)
-        self.s2 = int(s2_count > 0)
         
-        # rsi(5) 大于 95-rsi_p
-        self.s3 = int(self.rsi1 > (95 - self.rsi_p))
+        # 中长期均线空排 MA60 < MA120      -- S1
+        SC[6] = ma60_below_ma120
         
-        # 开仓时在BIAS_N2个周期内，MyBIAS没有大于BIAS_P2的值
-        s4_count = self.count_pred(diff_bias_s > self.bias_p2, self.N2)
-        self.s4 = int(s4_count < 1)
+        # k线在中长期均线之下 CLOSE < MA20 AND CLOSE < MA60 AND MA20 < MA60     -- S2
+        SC[7] = close_below_ma20 and close_below_ma60 and ma20_below_ma60
         
-        close_below_ma120 = bar.close_price < self.ma120
-        # 价格位于中长期均线之上
-        self.s5 = int(close_below_ma120)
-
-        # 开仓时最近4bar跌幅小于-0.35%
-        self.s6 = int(self.roc_4 > -self.roc_p)
-        # 空头开仓条件 End
+        # 中期均线与长期均线一致       -- S3
+        SC[8] = ma20_is_down or ma30_is_down
+        
+        self.s1 = int(SC[1])
+        self.s2 = int(SC[2])
+        self.s3 = int(SC[3])
+        self.s4 = int(SC[4])
+        self.s5 = int(SC[5])
+        self.s6 = int(SC[6] and SC[7] and SC[8])
+        ### 空头开仓条件 END
         
         if self.pos == 0:
             # print(f"{bar.datetime} c1:{self.c1} c2:{self.c2} c3:{self.c3} c4:{self.c4} c5:{self.c5} c6:{self.c6}")
-            if self.c1 and self.c2 and self.c3 and self.c4 and self.c5 and self.c6:
+            if all(LC):
                 if is_between_10_and_14(bar.datetime):
                     op_px = self.get_open_long_price(bar, self.ma10, self.ma20)
                     self.buy(op_px, self.fixed_size)
                     self.write_log(f"[LONG] buy at {op_px}")
                 else:
                     self.write_log("不在交易时间10:00-14:00")
-            elif self.s1 and self.s2 and self.s3 and self.s4 and self.s5 and self.s6:
+            elif all(SC):
                 if is_between_10_and_14(bar.datetime):
                     # open short position
                     op_px = self.get_open_short_price(bar, self.ma10, self.ma20)
@@ -376,14 +383,14 @@ class myCciStrategy(CtaTemplate):
         
         return self.dif_ma
     
-    def calc_bias_diff(self, ma1:np.ndarray, ma2:np.ndarray, ma3:np.ndarray) -> np.ndarray:
+    def calc_bias_diff(self, ma1:np.ndarray, ma2:np.ndarray, ma3:np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         close = self.am.close
         bias1 = (close - ma1) / ma1 * 100
         bias2 = (close - ma2) / ma2 * 100
         bias3 = (close - ma3) / ma3 * 100
         avg_bias = (bias1 + bias2 + bias3) / 3
         diff_bias = abs(bias1 - avg_bias) + abs(bias2 - avg_bias) + abs(bias3 - avg_bias)
-        return diff_bias
+        return bias1, diff_bias
     
     def calc_cci(self, CCI_M_P:int = 10) -> tuple[float, float]:
         '''计算CCI指标'''
