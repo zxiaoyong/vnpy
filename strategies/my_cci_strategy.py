@@ -177,9 +177,9 @@ class myCciStrategy(CtaTemplate):
         # MACD柱 连续2根数值增长     -- L7
         LC[3] = self.ma_up(macd, 2)
         
-        rsi = self.calc_rsi(self.N1)
+        self.rsi1 = self.calc_rsi(self.N1)
         # RSI < 85     -- L5
-        LC[4] = rsi < self.rsi_p
+        LC[4] = self.rsi1 < self.rsi_p
         
         bias1_s, diff_bias_s = self.calc_bias_diff(self.ma5_s, self.ma10_s, self.ma20_s)
         self.bias1 = bias1_s[-1]
@@ -222,7 +222,7 @@ class myCciStrategy(CtaTemplate):
         # MACD柱 连续2根数值减少     -- S7
         SC[3] = self.ma_down(macd, 2)
         # RSI > 10   S5:=RSI1 > (95-RSI_P)  -- S5
-        SC[4] = rsi > (95 - self.rsi_p)
+        SC[4] = self.rsi1 > (95 - self.rsi_p)
         # C1:=ABS(BIAS1)<(BIAS_P-0.1) AND DIFF_BIAS<BIAS_P
         SC[5] = LC[5]
         
@@ -257,7 +257,7 @@ class myCciStrategy(CtaTemplate):
                     op_px = self.get_open_long_price(bar, self.ma10, self.ma20)
                     self.buy(op_px, self.fixed_size)
                     self.write_log(f"[LONG] buy at {op_px}")
-                    print(f"{bar.datetime} diff_ma:{diff_ma:.2f} bias1:{self.bias1:.2f} diff_bias:{self.diff_bias:.2f} cci:{cci:.2f} rsi:{rsi:.2f} macd:{macd[-1]:.2f}")
+                    print(f"{bar.datetime} diff_ma:{diff_ma:.2f} bias1:{self.bias1:.2f} diff_bias:{self.diff_bias:.2f} cci:{cci:.2f} rsi:{self.rsi1:.2f} macd:{macd[-1]:.2f}")
                 else:
                     self.write_log("不在交易时间10:00-14:00")
             elif all(SC):
