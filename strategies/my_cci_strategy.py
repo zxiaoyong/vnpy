@@ -44,7 +44,8 @@ class myCciStrategy(CtaTemplate):
     # CCI_P: 10-500, 75      开仓时CCI值大于此值
     cci_p = 75
     # BIAS_P: 0.01-10, 0.2     开仓时DIFF_BIAS小于此值
-    bias_p = 0.2
+    bias_long_p = 0.2
+    bias_short_p = 0.14
     # RSI_P: 0-100, 85    开仓时RSI值小于此值
     rsi_p = 85
     
@@ -106,7 +107,7 @@ class myCciStrategy(CtaTemplate):
     
     loading_hist_bars:bool = False
 
-    parameters = ["dif_lower_p", "dif_upper_p", "cci_p", "bias_p", "rsi_p", "op_offset_px"]
+    parameters = ["dif_lower_p", "dif_upper_p", "cci_p", "bias_long_p", "bias_short_p", "rsi_p", "op_offset_px"]
 
     variables = ["ma20", "dif_sum", "cci", "bias1", "diff_bias", "rsi1",
                  "c1", "c2", "c3", "c4", "c5", "c6"]
@@ -134,6 +135,7 @@ class myCciStrategy(CtaTemplate):
         Callback when strategy is started.
         """
         self.write_log("策略启动")
+        print(f"direction,datetime,diff_ma,bias1,diff_bias,cci,rsi,macd")        
 
     def on_stop(self):
         """
@@ -185,7 +187,7 @@ class myCciStrategy(CtaTemplate):
         self.bias1 = bias1_s[-1]
         self.diff_bias = diff_bias_s[-1]
         # C1:=ABS(BIAS1)<(BIAS_P-0.1) AND DIFF_BIAS<BIAS_P      -- C1
-        LC[5] = abs(self.bias1) < (self.bias_p - 0.05) and self.diff_bias < self.bias_p
+        LC[5] = abs(self.bias1) < (self.bias_long_p - 0.05) and self.diff_bias < self.bias_long_p
 
         ma5_is_up = self.ma_up(self.ma5_s)
         ma10_is_up = self.ma_up(self.ma10_s, 2)
@@ -223,9 +225,9 @@ class myCciStrategy(CtaTemplate):
         SC[3] = self.ma_down(macd, 2)
         # RSI > 10   S5:=RSI1 > (95-RSI_P)  -- S5
         SC[4] = self.rsi1 > (95 - self.rsi_p)
-        # C1:=ABS(BIAS1)<(BIAS_P-0.1) AND DIFF_BIAS<BIAS_P
-        SC[5] = LC[5]
-        
+        # C1:=ABS(BIAS1)< 0.13 AND DIFF_BIAS < 0.14
+        SC[5] = abs(self.bias1) < (self.bias_short_p - 0.01) and self.diff_bias < self.bias_short_p
+
         ma20_is_down = self.ma_down(self.ma20_s, 2)
         ma30_is_down = self.ma_down(self.ma30_s, 3)
         close_below_ma20 = bar.close_price < self.ma20
@@ -257,15 +259,16 @@ class myCciStrategy(CtaTemplate):
                     op_px = self.get_open_long_price(bar, self.ma10, self.ma20)
                     self.buy(op_px, self.fixed_size)
                     self.write_log(f"[LONG] buy at {op_px}")
-                    print(f"{bar.datetime} diff_ma:{diff_ma:.2f} bias1:{self.bias1:.2f} diff_bias:{self.diff_bias:.2f} cci:{cci:.2f} rsi:{self.rsi1:.2f} macd:{macd[-1]:.2f}")
+                    print(f"long,{bar.datetime},{diff_ma:.2f},{self.bias1:.2f},{self.diff_bias:.2f},{cci:.2f},{self.rsi1:.2f},{macd[-1]:.2f}")
                 else:
                     self.write_log("不在交易时间10:00-14:00")
             elif all(SC):
                 if is_between_10_and_14(bar.datetime):
                     # open short position
                     op_px = self.get_open_short_price(bar, self.ma10, self.ma20)
-                    # self.short(op_px, self.fixed_size)
+                    self.short(op_px, self.fixed_size)
                     self.write_log(f"[SHORT] sell at {op_px}")
+                    print(f"short,{bar.datetime},{diff_ma:.2f},{self.bias1:.2f},{self.diff_bias:.2f},{cci:.2f},{self.rsi1:.2f},{macd[-1]:.2f}")
                 else:
                     self.write_log("不在交易时间10:00-14:30")
 
@@ -288,20 +291,20 @@ class myCciStrategy(CtaTemplate):
                         self.put_event()
                         return
 
-            # 【开仓中期】MA20开始渐渐上行，只要不连续2bar低于MA20就保持持仓
-            # 【止盈】RSI > 80 以后，一旦不上涨就止盈，止盈价格为前一bar close
-            if self.rsi1 > 80 and self.ma_down(self.am.close):
-                self.sell(bar.close_price, abs(self.pos))
-                self.write_log(f"[stop gain 1] close position at {bar.close_price}")
-                self.put_event()
-                return
+            # # 【开仓中期】MA20开始渐渐上行，只要不连续2bar低于MA20就保持持仓
+            # # 【止盈】RSI > 80 以后，一旦不上涨就止盈，止盈价格为前一bar close
+            # if self.rsi1 > 80 and self.ma_down(self.am.close):
+            #     self.sell(bar.close_price, abs(self.pos))
+            #     self.write_log(f"[stop gain 1] close position at {bar.close_price}")
+            #     self.put_event()
+            #     return
             
-            # 【止盈】RSI > 86， bar close时止盈
-            if self.rsi1 > 86:
-                self.sell(bar.close_price, abs(self.pos))
-                self.write_log(f"[stop gain 2] close position at {bar.close_price}")
-                self.put_event()
-                return
+            # # 【止盈】RSI > 86， bar close时止盈
+            # if self.rsi1 > 86:
+            #     self.sell(bar.close_price, abs(self.pos))
+            #     self.write_log(f"[stop gain 2] close position at {bar.close_price}")
+            #     self.put_event()
+            #     return
             
             # 连续2bar低于ma20
             sell_cond:bool = self.count_pred(am.close < self.ma20_s, 2) >= 2
@@ -318,18 +321,18 @@ class myCciStrategy(CtaTemplate):
             
             # 【开空单中期】MA20开始渐渐下行，只要不连续2bar高于MA20就保持持仓
             # 【止盈】RSI < 80 以后，一旦不上涨就止盈，止盈价格为前一bar close
-            if self.rsi1 < 20 and self.ma_up(self.am.close):
-                self.cover(bar.close_price, abs(self.pos))
-                self.write_log(f"[stop gain 1] close short position at {bar.close_price}")
-                self.put_event()
-                return
+            # if self.rsi1 < 20 and self.ma_up(self.am.close):
+            #     self.cover(bar.close_price, abs(self.pos))
+            #     self.write_log(f"[stop gain 1] close short position at {bar.close_price}")
+            #     self.put_event()
+            #     return
             
-            # 【止盈】RSI < 15， bar close时止盈
-            if self.rsi1 < 15:
-                self.cover(bar.close_price, abs(self.pos))
-                self.write_log(f"[stop gain 2] close short position at {bar.close_price}")
-                self.put_event()
-                return
+            # # 【止盈】RSI < 15， bar close时止盈
+            # if self.rsi1 < 15:
+            #     self.cover(bar.close_price, abs(self.pos))
+            #     self.write_log(f"[stop gain 2] close short position at {bar.close_price}")
+            #     self.put_event()
+            #     return
             
             # 连续2bar高于ma20
             sell_cond:bool = self.count_pred(am.close > self.ma20_s, 2) >= 2
