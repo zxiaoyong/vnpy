@@ -69,6 +69,9 @@ class myCciStrategy(CtaTemplate):
     ma120_s:np.ndarray = None
     ma250_s:np.ndarray = None
     
+    vol_ma20_s:np.ndarray = None
+    vol_ma60_s:np.ndarray = None
+    
     ma5:float = 0
     ma10:float = 0
     ma20:float = 0
@@ -135,7 +138,7 @@ class myCciStrategy(CtaTemplate):
         Callback when strategy is started.
         """
         self.write_log("策略启动")
-        print(f"direction,datetime,diff_ma,bias1,diff_bias,cci,rsi,macd")        
+        print(f"direction,datetime,diff_ma,bias1,diff_bias,cci,rsi,macd,vol20,vol10,vol")        
 
     def on_stop(self):
         """
@@ -259,7 +262,8 @@ class myCciStrategy(CtaTemplate):
                     op_px = self.get_open_long_price(bar, self.ma10, self.ma20)
                     self.buy(op_px, self.fixed_size)
                     self.write_log(f"[LONG] buy at {op_px}")
-                    print(f"long,{bar.datetime},{diff_ma:.2f},{self.bias1:.2f},{self.diff_bias:.2f},{cci:.2f},{self.rsi1:.2f},{macd[-1]:.2f}")
+                    vol_rate_20, vol_rate_60 = self.calc_vol_rate(bar)
+                    print(f"long,{bar.datetime},{diff_ma:.2f},{self.bias1:.2f},{self.diff_bias:.2f},{cci:.2f},{self.rsi1:.2f},{macd[-1]:.2f},{vol_rate_20:.2f},{vol_rate_60:.2f},{bar.volume}")
                 else:
                     self.write_log("不在交易时间10:00-14:00")
             elif all(SC):
@@ -268,7 +272,8 @@ class myCciStrategy(CtaTemplate):
                     op_px = self.get_open_short_price(bar, self.ma10, self.ma20)
                     self.short(op_px, self.fixed_size)
                     self.write_log(f"[SHORT] sell at {op_px}")
-                    print(f"short,{bar.datetime},{diff_ma:.2f},{self.bias1:.2f},{self.diff_bias:.2f},{cci:.2f},{self.rsi1:.2f},{macd[-1]:.2f}")
+                    vol_rate_20, vol_rate_60 = self.calc_vol_rate(bar)
+                    print(f"short,{bar.datetime},{diff_ma:.2f},{self.bias1:.2f},{self.diff_bias:.2f},{cci:.2f},{self.rsi1:.2f},{macd[-1]:.2f},{vol_rate_20:.2f},{vol_rate_60:.2f},{bar.volume}")
                 else:
                     self.write_log("不在交易时间10:00-14:30")
 
@@ -372,6 +377,16 @@ class myCciStrategy(CtaTemplate):
         self.ma60_s = am.sma(self.N5, array=True)
         self.ma120_s = am.sma(self.N6, array=True)
         self.ma250_s = am.sma(self.N7, array=True)
+        
+        self.vol_ma20_s = talib.SMA(am.volume, 20)
+        self.vol_ma60_s = talib.SMA(am.volume, 10)
+    
+    def calc_vol_rate(self, bar:BarData) -> tuple[float, float]:
+        vol_ma20 = self.vol_ma20_s[-1]
+        vol_rate_20 = bar.volume / vol_ma20
+        vol_ma60 = self.vol_ma60_s[-1]
+        vol_rate_60 = bar.volume / vol_ma60
+        return vol_rate_20, vol_rate_60
 
     def calc_diff_sum(self, DIF_M_P:int = 10) -> float:
         '''计算均线距离之和以及移动平均
