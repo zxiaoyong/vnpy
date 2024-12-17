@@ -255,6 +255,8 @@ class myCciStrategy(CtaTemplate):
         self.s6 = int(SC[6] and SC[7] and SC[0])
         ### 空头开仓条件 END
         
+        stop_loss_ma = self.ma20_s
+        
         if self.pos == 0:
             # print(f"{bar.datetime} c1:{self.c1} c2:{self.c2} c3:{self.c3} c4:{self.c4} c5:{self.c5} c6:{self.c6}")
             if all(LC):
@@ -312,7 +314,7 @@ class myCciStrategy(CtaTemplate):
             #     return
             
             # 连续2bar低于ma20
-            sell_cond:bool = self.count_pred(am.close < self.ma20_s, 2) >= 2
+            sell_cond:bool = self.count_pred(am.close < stop_loss_ma, 2) >= 2
             if sell_cond:
                 self.sell(bar.close_price, abs(self.pos))
                 self.write_log(f"close position at {bar.close_price}")
@@ -340,7 +342,7 @@ class myCciStrategy(CtaTemplate):
             #     return
             
             # 连续2bar高于ma20
-            sell_cond:bool = self.count_pred(am.close > self.ma20_s, 2) >= 2
+            sell_cond:bool = self.count_pred(am.close > stop_loss_ma, 2) >= 2
             if sell_cond:
                 self.cover(bar.close_price, abs(self.pos))
                 self.write_log(f"close short position at {bar.close_price}")
